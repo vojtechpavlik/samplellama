@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"log"
 	"log/slog"
 	"net/http"
 	"os"
@@ -68,8 +67,7 @@ func main() {
 	mcpPort := flag.Int("mcp-port", 8081, "Port for MCP Streamable HTTP transport")
 	flag.Parse()
 
-	logger := log.New(os.Stderr, "[samplellama] ", log.LstdFlags)
-	slogger := slog.New(slog.NewTextHandler(os.Stderr, nil))
+	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
 
 	holder := newSessionHolder()
 
@@ -77,14 +75,14 @@ func main() {
 		Name:    "samplellama",
 		Version: version,
 	}, &mcp.ServerOptions{
-		Logger: slogger,
+		Logger: logger,
 		InitializedHandler: func(ctx context.Context, req *mcp.InitializedRequest) {
 			holder.set(req.Session)
-			logger.Printf("MCP session initialized: %s", req.Session.ID())
+			logger.Info("MCP session initialized", "session_id", req.Session.ID())
 			go func() {
 				req.Session.Wait()
 				holder.remove(req.Session.ID())
-				logger.Printf("MCP session closed: %s", req.Session.ID())
+				logger.Info("MCP session closed", "session_id", req.Session.ID())
 			}()
 		},
 	})
@@ -111,26 +109,28 @@ func main() {
 
 	// Start Ollama HTTP server in background.
 	go func() {
-		logger.Printf("Ollama-compatible API listening on %s", ollamaAddr)
+		logger.Info("Ollama-compatible API listening", "addr", ollamaAddr)
 		if err := ollamaServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			logger.Fatalf("Ollama HTTP server error: %v", err)
+			logger.Error("Ollama HTTP server error", "error", err)
+			os.Exit(1)
 		}
 	}()
 
 	// Start MCP transport (blocks until context is cancelled or transport closes).
 	switch *mcpTransport {
 	case "stdio":
-		logger.Println("Starting MCP stdio transport")
+		logger.Info("Starting MCP stdio transport")
 		ss, err := mcpServer.Connect(ctx, &mcp.StdioTransport{}, nil)
 		if err != nil {
-			logger.Fatalf("MCP stdio connect error: %v", err)
+			logger.Error("MCP stdio connect error", "error", err)
+			os.Exit(1)
 		}
 		holder.set(ss)
-		logger.Printf("MCP stdio session: %s", ss.ID())
+		logger.Info("MCP stdio session", "session_id", ss.ID())
 		ss.Wait()
 	case "http":
 		mcpAddr := fmt.Sprintf(":%d", *mcpPort)
-		logger.Printf("Starting MCP Streamable HTTP transport on %s", mcpAddr)
+		logger.Info("Starting MCP Streamable HTTP transport", "addr", mcpAddr)
 		httpHandler := mcp.NewStreamableHTTPHandler(func(r *http.Request) *mcp.Server {
 			return mcpServer
 		}, nil)
@@ -141,26 +141,28 @@ func main() {
 		}
 		go func() {
 			if err := mcpHTTPServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-				logger.Fatalf("MCP HTTP server error: %v", err)
+				logger.Error("MCP HTTP server error", "error", err)
+				os.Exit(1)
 			}
 		}()
 		<-ctx.Done()
 		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer shutdownCancel()
 		if err := mcpHTTPServer.Shutdown(shutdownCtx); err != nil {
-			logger.Printf("MCP HTTP shutdown error: %v", err)
+			logger.Error("MCP HTTP shutdown error", "error", err)
 		}
 	default:
-		logger.Fatalf("Unknown MCP transport: %s (use 'stdio' or 'http')", *mcpTransport)
+		logger.Error("Unknown MCP transport", "transport", *mcpTransport)
+		os.Exit(1)
 	}
 
 	// Graceful shutdown of Ollama server.
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer shutdownCancel()
 	if err := ollamaServer.Shutdown(shutdownCtx); err != nil {
-		logger.Printf("Ollama HTTP shutdown error: %v", err)
+		logger.Error("Ollama HTTP shutdown error", "error", err)
 	}
-	logger.Println("Shutdown complete")
+	logger.Info("Shutdown complete")
 }
 
 func parseModels(s string) []string {
@@ -201,17 +203,17 @@ func handleTags(models []string) http.HandlerFunc {
 	}
 }
 
-func handleChat(holder *sessionHolder, defaultMaxTokens int, logger *log.Logger) http.HandlerFunc {
+func handleChat(holder *sessionHolder, defaultMaxTokens int, logger *slog.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req ChatRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			writeError(w, http.StatusBadRequest, fmt.Sprintf("invalid JSON: %v", err))
+			writeError(w, logger, http.StatusBadRequest, fmt.Sprintf("invalid JSON: %v", err))
 			return
 		}
 
 		session := holder.get()
 		if session == nil {
-			writeError(w, http.StatusServiceUnavailable, "MCP host not connected")
+			writeError(w, logger, http.StatusServiceUnavailable, "MCP host not connected")
 			return
 		}
 
@@ -219,7 +221,7 @@ func handleChat(holder *sessionHolder, defaultMaxTokens int, logger *log.Logger)
 
 		result, err := session.CreateMessage(r.Context(), params)
 		if err != nil {
-			writeError(w, http.StatusBadGateway, fmt.Sprintf("sampling failed: %v", err))
+			writeError(w, logger, http.StatusBadGateway, fmt.Sprintf("sampling failed: %v", err))
 			return
 		}
 
@@ -263,17 +265,17 @@ func handleChat(holder *sessionHolder, defaultMaxTokens int, logger *log.Logger)
 	}
 }
 
-func handleGenerate(holder *sessionHolder, defaultMaxTokens int, logger *log.Logger) http.HandlerFunc {
+func handleGenerate(holder *sessionHolder, defaultMaxTokens int, logger *slog.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req GenerateRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			writeError(w, http.StatusBadRequest, fmt.Sprintf("invalid JSON: %v", err))
+			writeError(w, logger, http.StatusBadRequest, fmt.Sprintf("invalid JSON: %v", err))
 			return
 		}
 
 		session := holder.get()
 		if session == nil {
-			writeError(w, http.StatusServiceUnavailable, "MCP host not connected")
+			writeError(w, logger, http.StatusServiceUnavailable, "MCP host not connected")
 			return
 		}
 
@@ -281,7 +283,7 @@ func handleGenerate(holder *sessionHolder, defaultMaxTokens int, logger *log.Log
 
 		result, err := session.CreateMessage(r.Context(), params)
 		if err != nil {
-			writeError(w, http.StatusBadGateway, fmt.Sprintf("sampling failed: %v", err))
+			writeError(w, logger, http.StatusBadGateway, fmt.Sprintf("sampling failed: %v", err))
 			return
 		}
 
@@ -325,7 +327,8 @@ func handleGenerate(holder *sessionHolder, defaultMaxTokens int, logger *log.Log
 	}
 }
 
-func writeError(w http.ResponseWriter, status int, msg string) {
+func writeError(w http.ResponseWriter, logger *slog.Logger, status int, msg string) {
+	logger.Error("HTTP error", "status", status, "message", msg)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	json.NewEncoder(w).Encode(ErrorResponse{Error: msg})
