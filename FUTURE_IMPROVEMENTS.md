@@ -14,7 +14,6 @@ This document outlines potential enhancements and security improvements for Samp
 - **MCP Content Types**: Enhance `extractTextContent` to support non-text MCP content types (e.g., `ImageContent` or `ResourceContent`) by converting them to appropriate textual representations or handling them according to Ollama's multi-modal capabilities.
 - **Incremental Streaming**: Since MCP sampling returns the full response at once, Samplellama currently sends the entire response in a single NDJSON chunk. Implementing "simulated" streaming (splitting the response into smaller chunks) could provide a more native Ollama experience for clients.
 - **Additional Ollama Fields**: Populate additional fields in the Ollama response, such as `total_duration`, `load_duration`, `prompt_eval_count`, and `eval_duration`. Basic timing measurements can be used for durations.
-- **Version Management**: Harmonize Go version requirements across `go.mod`, `README.md`, and `samplellama.spec`. Currently, `go.mod` requires 1.25.5 while the RPM spec says 1.23.
 
 ## Observability & Developer Experience
 

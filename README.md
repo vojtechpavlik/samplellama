@@ -16,7 +16,7 @@ Ollama client  ──▶  samplellama  ──▶  MCP host  ──▶  LLM
 
 ## Building
 
-Requires Go 1.25.5 or later.
+Requires Go 1.23 or later.
 
 ```bash
 go build -o samplellama
