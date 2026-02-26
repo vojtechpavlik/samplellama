@@ -1,0 +1,47 @@
+name: Go
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version-file: 'go.mod'
+
+    - name: Build
+      run: go build -v ./...
+
+    - name: Test
+      run: go test -v ./...
+
+  lint-docs:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+
+    - name: Install mandoc
+      run: sudo apt-get install -y mandoc
+
+    - name: Install markdownlint-cli2
+      run: npm install -g markdownlint-cli2
+
+    - name: Lint manpage
+      run: mandoc -Tlint samplellama.1
+
+    - name: Lint markdown
+      run: markdownlint-cli2 README.md DESIGN.md

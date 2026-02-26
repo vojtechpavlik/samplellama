@@ -1,0 +1,189 @@
+.TH SAMPLELLAMA 1 2025-06-01 samplellama-0.1.0
+.SH NAME
+samplellama \- Ollama-to-MCP sampling bridge
+.SH SYNOPSIS
+.B samplellama
+.RB [ \-port
+.IR port ]
+.RB [ \-models
+.IR names ]
+.RB [ \-default\-max\-tokens
+.IR n ]
+.RB [ \-mcp\-transport
+.IR type ]
+.RB [ \-mcp\-port
+.IR port ]
+.SH DESCRIPTION
+.B samplellama
+is a bridge that lets tools built for the Ollama API use any LLM accessible
+through an MCP (Model Context Protocol) host.
+It runs as an MCP server and simultaneously exposes an Ollama-compatible HTTP
+API.
+When an Ollama client sends a request,
+.B samplellama
+translates it into an MCP
+.B sampling/createMessage
+call, forwards it to the connected MCP host, and returns the result in
+Ollama format.
+.PP
+The data flow is:
+.RS
+Ollama client \(-> samplellama \(-> MCP host \(-> LLM
+.RE
+.SS Transport modes
+In
+.B stdio
+mode (the default) the MCP host launches
+.B samplellama
+as a subprocess and communicates over stdin/stdout.
+.PP
+In
+.B http
+mode
+.B samplellama
+runs a second HTTP server for MCP, allowing the host to connect over the
+network using the Streamable HTTP transport.
+.SS Ollama API endpoints
+.B samplellama
+exposes the following endpoints on the Ollama HTTP port:
+.TP
+.B GET /
+Health check \(em returns
+.IR \(dqOllama is running\(dq .
+.TP
+.B GET /api/version
+Returns the samplellama version string.
+.TP
+.B GET /api/tags
+Lists the advertised model names.
+.TP
+.B POST /api/chat
+Chat completion with multi-turn messages.
+.TP
+.B POST /api/generate
+Text generation from a single prompt.
+.SS Error status codes
+.TP
+.B 400
+Malformed JSON in request body.
+.TP
+.B 502
+MCP
+.B CreateMessage
+call failed.
+.TP
+.B 503
+No MCP host session is connected.
+.SH OPTIONS
+.TP
+.BI \-port " port"
+Ollama HTTP listen port.
+Default:
+.BR 11434 .
+.TP
+.BI \-models " names"
+Comma-separated model names to advertise via
+.BR /api/tags .
+Default:
+.BR default .
+.TP
+.BI \-default\-max\-tokens " n"
+Default maximum number of tokens for sampling requests when the client does
+not specify
+.BR num_predict .
+Default:
+.BR 4096 .
+.TP
+.BI \-mcp\-transport " type"
+MCP transport mode:
+.B stdio
+or
+.BR http .
+Default:
+.BR stdio .
+.TP
+.BI \-mcp\-port " port"
+Port for the MCP Streamable HTTP transport (only used when
+.B \-mcp\-transport
+is
+.BR http ).
+Default:
+.BR 8081 .
+.SH EXIT STATUS
+.TP
+.B 0
+Clean shutdown (SIGINT or SIGTERM received).
+.TP
+.B 1
+Fatal error during startup or operation.
+.SH NOTES
+.SS Streaming behavior
+Because MCP sampling returns the full response at once,
+.B samplellama
+does not produce incremental token-by-token streaming.
+The stream mode emits the complete text in one NDJSON chunk followed by a
+done marker, which is compatible with clients that expect the NDJSON framing.
+.SS Session management
+In stdio mode a single MCP session is used.
+In HTTP mode multiple sessions can be active; the most recently connected
+session is used for sampling requests.
+.SH EXAMPLES
+Configure
+.B samplellama
+as an MCP server in the host's settings:
+.PP
+.RS
+.EX
+{
+  "mcpServers": {
+    "samplellama": {
+      "command": "/usr/bin/samplellama",
+      "args": ["\-port", "11434", "\-models", "llama3,codellama"]
+    }
+  }
+}
+.EE
+.RE
+.PP
+Start in HTTP transport mode:
+.PP
+.RS
+.EX
+samplellama \-mcp\-transport http \-mcp\-port 8081
+.EE
+.RE
+.PP
+Send a chat request:
+.PP
+.RS
+.EX
+curl http://localhost:11434/api/chat \-d '{
+  "model": "llama3",
+  "messages": [
+    {"role": "user", "content": "Hello!"}
+  ],
+  "stream": false
+}'
+.EE
+.RE
+.PP
+Send a generate request:
+.PP
+.RS
+.EX
+curl http://localhost:11434/api/generate \-d '{
+  "model": "llama3",
+  "prompt": "Tell me a joke",
+  "stream": false
+}'
+.EE
+.RE
+.SH SEE ALSO
+.BR ollama (1)
+.PP
+Model Context Protocol specification:
+.nf
+https://spec.modelcontextprotocol.io/
+.fi
+.SH AUTHOR
+Vojtech Pavlik

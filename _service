@@ -1,0 +1,23 @@
+<services>
+  <!-- 1. Download Git repo and create a tarball directly -->
+  <!-- NOTE: Repository not yet published -->
+  <service name="tar_scm">
+    <param name="url">https://github.com/vojtechpavlik/samplellama</param>
+    <param name="scm">git</param>
+    <param name="revision">main</param>
+    <param name="versionformat">%cd.%h</param>
+    <param name="filename">samplellama</param>
+  </service>
+
+  <!-- 2. Compress the tarball to .tar.gz -->
+  <service name="recompress">
+    <param name="file">*.tar</param>
+    <param name="compression">gz</param>
+  </service>
+
+  <!-- 3. Update the .spec file version -->
+  <service name="set_version"/>
+
+  <!-- 4. Download Go modules -->
+  <service name="go_modules"/>
+</services>
