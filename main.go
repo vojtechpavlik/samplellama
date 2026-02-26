@@ -200,8 +200,14 @@ func handleTags(models []string) http.HandlerFunc {
 		for _, m := range models {
 			infos = append(infos, ModelInfo{
 				Name:       m,
+				Model:      m,
 				ModifiedAt: time.Now(),
 				Size:       0,
+				Digest:     "sha256:000000000000",
+				Details: ModelDetails{
+					Format: "mcp",
+					Family: "mcp",
+				},
 			})
 		}
 		w.Header().Set("Content-Type", "application/json")
