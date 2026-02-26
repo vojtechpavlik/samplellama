@@ -19,21 +19,27 @@ import (
 
 const version = "samplellama-0.1.0"
 
+// SamplingSession defines the interface for MCP sessions that support sampling.
+type SamplingSession interface {
+	ID() string
+	CreateMessage(context.Context, *mcp.CreateMessageParams) (*mcp.CreateMessageResult, error)
+}
+
 // sessionHolder provides thread-safe access to MCP client sessions.
 // In stdio mode there is one session; in HTTP mode there may be multiple.
 type sessionHolder struct {
 	mu       sync.RWMutex
-	sessions map[string]*mcp.ServerSession
-	latest   *mcp.ServerSession
+	sessions map[string]SamplingSession
+	latest   SamplingSession
 }
 
 func newSessionHolder() *sessionHolder {
 	return &sessionHolder{
-		sessions: make(map[string]*mcp.ServerSession),
+		sessions: make(map[string]SamplingSession),
 	}
 }
 
-func (h *sessionHolder) set(session *mcp.ServerSession) {
+func (h *sessionHolder) set(session SamplingSession) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.sessions[session.ID()] = session
@@ -53,7 +59,7 @@ func (h *sessionHolder) remove(sessionID string) {
 	}
 }
 
-func (h *sessionHolder) get() *mcp.ServerSession {
+func (h *sessionHolder) get() SamplingSession {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	return h.latest

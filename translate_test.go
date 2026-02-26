@@ -189,4 +189,27 @@ func TestExtractTextContent(t *testing.T) {
 	if got := extractTextContent(nil); got != "" {
 		t.Errorf("expected empty string for nil, got %q", got)
 	}
+
+	// non-text content
+	ic := &mcp.ImageContent{Data: []byte("base64"), MIMEType: "image/png"}
+	if got := extractTextContent(ic); got != "" {
+		t.Errorf("expected empty string for non-text content, got %q", got)
+	}
+}
+
+func TestChatToCreateMessageUnknownRole(t *testing.T) {
+	req := ChatRequest{
+		Messages: []OllamaMessage{
+			{Role: "unknown", Content: "Hello"},
+		},
+	}
+
+	result := chatToCreateMessage(req, 4096)
+
+	if len(result.Messages) != 1 {
+		t.Fatalf("expected 1 message, got %d", len(result.Messages))
+	}
+	if result.Messages[0].Role != mcp.Role("user") {
+		t.Errorf("expected unknown role to map to 'user', got %q", result.Messages[0].Role)
+	}
 }
