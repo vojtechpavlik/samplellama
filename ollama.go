@@ -81,6 +81,35 @@ type ModelDetails struct {
 	QuantizationLevel string `json:"quantization_level"`
 }
 
+// Show endpoint types
+
+type ShowRequest struct {
+	Model string `json:"model"`
+	Name  string `json:"name"` // deprecated alias
+}
+
+type ShowResponse struct {
+	License    string       `json:"license"`
+	Modelfile  string       `json:"modelfile"`
+	Parameters string       `json:"parameters"`
+	Template   string       `json:"template"`
+	System     string       `json:"system"`
+	Details    ModelDetails `json:"details"`
+	ModifiedAt time.Time    `json:"modified_at"`
+}
+
+// Pull endpoint types
+
+type PullRequest struct {
+	Model  string `json:"model"`
+	Name   string `json:"name"` // deprecated alias
+	Stream *bool  `json:"stream,omitempty"`
+}
+
+type ProgressResponse struct {
+	Status string `json:"status"`
+}
+
 // Version endpoint
 
 type VersionResponse struct {

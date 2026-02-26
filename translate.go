@@ -16,6 +16,9 @@ func chatToCreateMessage(req ChatRequest, defaultMaxTokens int) *mcp.CreateMessa
 			systemParts = append(systemParts, msg.Content)
 			continue
 		}
+		if msg.Content == "" {
+			continue
+		}
 		role := mcp.Role("user")
 		if msg.Role == "assistant" {
 			role = mcp.Role("assistant")
